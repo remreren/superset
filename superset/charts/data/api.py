@@ -147,8 +147,11 @@ class ChartDataRestApi(ChartRestApi):
         json_body["result_type"] = request.args.get("type", ChartDataResultType.FULL)
         json_body["force"] = request.args.get("force")
 
+        user_preference = self._get_user_preference(json_body)
+
         try:
             query_context = self._create_query_context_from_form(json_body)
+            query_context = self._customize_query_context(query_context, user_preference)
             command = ChartDataCommand(query_context)
             command.validate()
         except DatasourceNotFound:
@@ -234,9 +237,12 @@ class ChartDataRestApi(ChartRestApi):
                 json_body = json.loads(request.form["form_data"])
         if json_body is None:
             return self.response_400(message=_("Request is not JSON"))
+        
+        user_preference = self._get_user_preference(json_body)
 
         try:
             query_context = self._create_query_context_from_form(json_body)
+            query_context = self._customize_query_context(query_context, user_preference)
             command = ChartDataCommand(query_context)
             command.validate()
         except DatasourceNotFound:
@@ -449,3 +455,22 @@ class ChartDataRestApi(ChartRestApi):
             raise ValidationError("Request is incorrect") from ex
         except ValidationError as error:
             raise error
+    
+    def _get_user_preference(self, body) -> dict[str, Any]:
+        form_data = body.get("form_data", {})
+        slice_id = form_data.get("slice_id", None)
+        user_preference = {}
+
+        if slice_id != None:
+            prefs_str = form_data.get("url_params", {})
+            slice_prefs = prefs_str.get(str(slice_id), "{}")
+            user_preference = json.loads(slice_prefs)
+        
+        return user_preference
+    
+    def _customize_query_context(self, query_context, user_preference) -> QueryContext:
+        for key, value in user_preference.items():
+            if len(query_context.queries) > 0:
+                setattr(query_context.queries[0], key, value)
+
+        return query_context
