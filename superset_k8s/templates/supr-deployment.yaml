@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supr
+  namespace: default
+  labels:
+    app: supr
+    chart: supr-0.1.0
+    release: supr
+    heritage: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: supr
+      release: supr
+  template:
+    metadata:
+      labels:
+        app: supr
+        release: supr
+    spec:
+      containers:
+        - name: supr
+          image: "supr:latest"
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh","-c","/usr/bin/run-server.sh"]
+          env:
+            - name: PORT
+              value: "8089"
+          envFrom:
+            - secretRef:
+                name: "supr-env"
+            # - secretRef:
+            #     name: "superset-env"
+          ports:
+            - name: http
+              containerPort: 8089
+          startupProbe:
+            failureThreshold: 60
+            httpGet:
+              path: /supr/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 1
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /supr/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            successThreshold: 1
+            timeoutSeconds: 1
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /supr/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            successThreshold: 1
+            timeoutSeconds: 1
+          resources:
+            {}
+      volumes:
+        - name: supr-config
+          secret:
+            secretName: supr-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: supr
+  namespace: default
+  labels:
+    app: supr
+    chart: supr-0.1.0
+    release: supr
+    heritage: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8089
+      targetPort: http
+      name: http
+  selector:
+    app: supr
+    release: supr
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: supr-env
+  namespace: default
+  labels:
+    app: supr
+    chart: supr-0.1.0
+    release: supr
+    heritage: Helm
+type: Opaque
+stringData:
+  SUPERSET_HOST: "superset"
+  SUPERSET_PORT: "8088"
+  SUPR_PORT: "8089"
